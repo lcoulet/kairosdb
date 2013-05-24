@@ -84,7 +84,7 @@ public class WriteBuffer<RowKeyType, ColumnKeyType, ValueType>  implements Runna
 				{
 					m_lockCondition.await();
 				}
-				catch (InterruptedException e) {}
+				catch (InterruptedException ignored) {}
 			}
 
 			m_bufferCount ++;
@@ -116,7 +116,7 @@ public class WriteBuffer<RowKeyType, ColumnKeyType, ValueType>  implements Runna
 		if (m_maxBufferSize < m_initialMaxBufferSize)
 		{
 			m_maxBufferSize += 1000;
-			logger.info("Increasing write buffers size to "+m_maxBufferSize);
+			logger.info("Increasing write buffer " + m_cfName + " size to "+m_maxBufferSize);
 		}
 	}
 
@@ -130,7 +130,7 @@ public class WriteBuffer<RowKeyType, ColumnKeyType, ValueType>  implements Runna
 			{
 				Thread.sleep(m_writeDelay);
 			}
-			catch (InterruptedException e) {}
+			catch (InterruptedException ignored) {}
 
 			Mutator<RowKeyType> pendingMutations = null;
 
@@ -177,7 +177,7 @@ public class WriteBuffer<RowKeyType, ColumnKeyType, ValueType>  implements Runna
 				{
 					Thread.sleep(100);
 				}
-				catch (InterruptedException e){ }
+				catch (InterruptedException ignored){ }
 
 				try
 				{

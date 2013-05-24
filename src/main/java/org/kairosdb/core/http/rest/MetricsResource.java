@@ -19,7 +19,7 @@ package org.kairosdb.core.http.rest;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.stream.MalformedJsonException;
 import org.kairosdb.core.datastore.DataPointGroup;
-import org.kairosdb.core.datastore.Datastore;
+import org.kairosdb.core.datastore.KairosDatastore;
 import org.kairosdb.core.datastore.QueryMetric;
 import org.kairosdb.core.formatter.DataFormatter;
 import org.kairosdb.core.formatter.FormatterException;
@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static javax.ws.rs.core.Response.ResponseBuilder;
@@ -58,12 +59,12 @@ public class MetricsResource
 {
 	private static final Logger log = LoggerFactory.getLogger(MetricsResource.class);
 
-	private final Datastore datastore;
+	private final KairosDatastore datastore;
 	private final Map<String, DataFormatter> formatters = new HashMap<String, DataFormatter>();
 	private final GsonParser gsonParser;
 
 	@Inject
-	public MetricsResource(Datastore datastore, GsonParser gsonParser)
+	public MetricsResource(KairosDatastore datastore, GsonParser gsonParser)
 	{
 		this.datastore = checkNotNull(datastore);
 		this.gsonParser= checkNotNull(gsonParser);
@@ -75,7 +76,10 @@ public class MetricsResource
 	@Path("/version")
 	public Response getVersion()
 	{
-		ResponseBuilder responseBuilder = Response.status(Response.Status.OK).entity("{\"version\": \"KairosDB Beta1\"}");
+		Package thisPackage = getClass().getPackage();
+		String versionString = thisPackage.getImplementationTitle()+" "+thisPackage.getImplementationVersion();
+		ResponseBuilder responseBuilder = Response.status(Response.Status.OK).entity("{\"version\": \""+versionString+"\"}");
+		responseBuilder.header("Access-Control-Allow-Origin", "*");
 		return responseBuilder.build();
 	}
 
@@ -101,6 +105,25 @@ public class MetricsResource
 	public Response getTagValues()
 	{
 		return executeNameQuery(NameType.TAG_VALUES);
+	}
+
+	@POST
+	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+	@Consumes("application/gzip")
+	@Path("/datapoints")
+	public Response addGzip(InputStream gzip)
+	{
+		GZIPInputStream gzipInputStream = null;
+		try
+		{
+			gzipInputStream = new GZIPInputStream(gzip);
+		}
+		catch (IOException e)
+		{
+			JsonResponseBuilder builder = new JsonResponseBuilder(Response.Status.BAD_REQUEST);
+			return builder.addError(e.getMessage()).build();
+		}
+		return (add(gzipInputStream));
 	}
 
 	@POST
@@ -132,6 +155,7 @@ public class MetricsResource
 		}
 	}
 
+
 	@POST
 	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
 	@Path("/datapoints/query")
@@ -155,6 +179,8 @@ public class MetricsResource
 
 			ResponseBuilder responseBuilder = Response.status(Response.Status.OK).entity(
 					new DataPointsStreamingOutput(formatter, aggregatedResults));
+
+			responseBuilder.header("Access-Control-Allow-Origin", "*");
 			return responseBuilder.build();
 		}
 		catch (JsonSyntaxException e)
@@ -177,6 +203,36 @@ public class MetricsResource
 			log.error("Query failed.", e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
 		}
+	}
+
+	/**
+	 Information for this endpoint was taken from
+	 https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
+
+	 Response to a cors preflight request to access data.
+	 */
+	@OPTIONS
+	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+	@Path("/datapoints/query")
+	public Response corsPreflightQuery(@HeaderParam("Access-Control-Request-Headers")String requestHeaders,
+			@HeaderParam("Access-Control-Request-Method")String requestMethod)
+	{
+		ResponseBuilder responseBuilder = Response.status(Response.Status.OK);
+		responseBuilder.header("Access-Control-Allow-Origin", "*");
+		responseBuilder.header("Access-Control-Max-Age", "86400"); //Cache for one day
+		responseBuilder.header("Access-Control-Allow-Headers", requestHeaders);
+		if (requestMethod != null)
+			responseBuilder.header("Access-Control-Allow_Method", requestMethod);
+		return (responseBuilder.build());
+	}
+
+	@OPTIONS
+	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+	@Path("/datapoints")
+	public Response corsPreflightDataPoints(@HeaderParam("Access-Control-Request-Headers")String requestHeaders,
+			@HeaderParam("Access-Control-Request-Method")String requestMethod)
+	{
+		return (corsPreflightQuery(requestHeaders, requestMethod));
 	}
 
 
@@ -202,6 +258,7 @@ public class MetricsResource
 
 			ResponseBuilder responseBuilder = Response.status(Response.Status.OK).entity(
 					new ValuesStreamingOutput(formatter, values));
+			responseBuilder.header("Access-Control-Allow-Origin", "*");
 			return responseBuilder.build();
 		}
 		catch (Exception e)

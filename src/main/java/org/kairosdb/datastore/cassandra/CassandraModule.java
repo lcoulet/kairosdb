@@ -21,6 +21,7 @@ import com.google.inject.Scopes;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Names;
 import org.kairosdb.core.datastore.Datastore;
+import org.kairosdb.core.datastore.KairosDatastore;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -54,6 +55,7 @@ public class CassandraModule extends AbstractModule
 	protected void configure()
 	{
 		bind(Datastore.class).to(CassandraDatastore.class).in(Scopes.SINGLETON);
+		bind(IncreaseMaxBufferSizesJob.class).in(Scopes.SINGLETON);
 
 		bind(new TypeLiteral<Map<String, String>>(){}).annotatedWith(Names.named(CASSANDRA_AUTH_MAP))
 				.toInstance(m_authMap);

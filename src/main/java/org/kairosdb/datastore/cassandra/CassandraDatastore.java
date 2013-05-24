@@ -31,14 +31,12 @@ import me.prettyprint.hector.api.Keyspace;
 import me.prettyprint.hector.api.ddl.ColumnFamilyDefinition;
 import me.prettyprint.hector.api.ddl.ComparatorType;
 import me.prettyprint.hector.api.ddl.KeyspaceDefinition;
+import me.prettyprint.hector.api.exceptions.HectorException;
 import me.prettyprint.hector.api.factory.HFactory;
 import me.prettyprint.hector.api.query.SliceQuery;
 import org.kairosdb.core.DataPoint;
 import org.kairosdb.core.DataPointSet;
-import org.kairosdb.core.datastore.CachedSearchResult;
-import org.kairosdb.core.datastore.DataPointRow;
-import org.kairosdb.core.datastore.Datastore;
-import org.kairosdb.core.datastore.DatastoreMetricQuery;
+import org.kairosdb.core.datastore.*;
 import org.kairosdb.core.exception.DatastoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +49,7 @@ import java.util.Map;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class CassandraDatastore extends Datastore
+public class CassandraDatastore implements Datastore
 {
 	public static final Logger logger = LoggerFactory.getLogger(CassandraDatastore.class);
 
@@ -72,6 +70,7 @@ public class CassandraDatastore extends Datastore
 	public static final String WRITE_BUFFER_SIZE = "kairosdb.datastore.cassandra.write_buffer_max_size";
 	public static final String SINGLE_ROW_READ_SIZE_PROPERTY = "kairosdb.datastore.cassandra.single_row_read_size";
 	public static final String MULTI_ROW_READ_SIZE_PROPERTY = "kairosdb.datastore.cassandra.multi_row_read_size";
+	public static final String MULTI_ROW_SIZE_PROPERTY = "kairosdb.datastore.cassandra.multi_row_size";
 
 	public static final String KEYSPACE = "kairosdb";
 	public static final String CF_DATA_POINTS = "data_points";
@@ -86,6 +85,7 @@ public class CassandraDatastore extends Datastore
 	private Cluster m_cluster;
 	private Keyspace m_keyspace;
 	private int m_singleRowReadSize;
+	private int m_multiRowSize;
 	private int m_multiRowReadSize;
 	private WriteBuffer<DataPointsRowKey, Integer, ByteBuffer> m_dataPointWriteBuffer;
 	private WriteBuffer<String, DataPointsRowKey, String> m_rowKeyWriteBuffer;
@@ -98,87 +98,96 @@ public class CassandraDatastore extends Datastore
 
 
 	@Inject
-	public CassandraDatastore(@Named(HOST_LIST_PROPERTY)String cassandraHostList,
-			@Named(CassandraModule.CASSANDRA_AUTH_MAP)Map<String, String> cassandraAuthentication,
-			@Named(REPLICATION_FACTOR_PROPERTY)int replicationFactor,
-			@Named(SINGLE_ROW_READ_SIZE_PROPERTY)int singleRowReadSize,
-			@Named(MULTI_ROW_READ_SIZE_PROPERTY)int multiRowReadSize,
-			@Named(WRITE_DELAY_PROPERTY)int writeDelay,
-			@Named(WRITE_BUFFER_SIZE)int maxWriteSize,
-			final @Named("HOSTNAME") String hostname) throws DatastoreException
+	public CassandraDatastore(@Named(HOST_LIST_PROPERTY) String cassandraHostList,
+	                          @Named(CassandraModule.CASSANDRA_AUTH_MAP) Map<String, String> cassandraAuthentication,
+	                          @Named(REPLICATION_FACTOR_PROPERTY) int replicationFactor,
+	                          @Named(SINGLE_ROW_READ_SIZE_PROPERTY) int singleRowReadSize,
+	                          @Named(MULTI_ROW_SIZE_PROPERTY) int multiRowSize,
+	                          @Named(MULTI_ROW_READ_SIZE_PROPERTY) int multiRowReadSize,
+	                          @Named(WRITE_DELAY_PROPERTY) int writeDelay,
+	                          @Named(WRITE_BUFFER_SIZE) int maxWriteSize,
+	                          final @Named("HOSTNAME") String hostname) throws DatastoreException
 	{
-		m_singleRowReadSize = singleRowReadSize;
-		m_multiRowReadSize = multiRowReadSize;
+		try
+		{
+			m_singleRowReadSize = singleRowReadSize;
+			m_multiRowSize = multiRowSize;
+			m_multiRowReadSize = multiRowReadSize;
 
-		CassandraHostConfigurator hostConfig = new CassandraHostConfigurator(cassandraHostList);
-		//TODO: fine tune the hostConfig
+			CassandraHostConfigurator hostConfig = new CassandraHostConfigurator(cassandraHostList);
+			//TODO: fine tune the hostConfig
 
-		m_cluster = HFactory.getOrCreateCluster("kairosdb-cluster",
-				hostConfig, cassandraAuthentication);
+			m_cluster = HFactory.getOrCreateCluster("kairosdb-cluster",
+					hostConfig, cassandraAuthentication);
 
-		KeyspaceDefinition keyspaceDef = m_cluster.describeKeyspace(KEYSPACE);
+			KeyspaceDefinition keyspaceDef = m_cluster.describeKeyspace(KEYSPACE);
 
-		if (keyspaceDef == null)
-			createSchema(replicationFactor);
+			if (keyspaceDef == null)
+				createSchema(replicationFactor);
 
-		m_keyspace = HFactory.createKeyspace(KEYSPACE, m_cluster);
+			m_keyspace = HFactory.createKeyspace(KEYSPACE, m_cluster);
 
-		ReentrantLock mutatorLock = new ReentrantLock();
-		Condition lockCondition =mutatorLock.newCondition();
+			ReentrantLock mutatorLock = new ReentrantLock();
+			Condition lockCondition = mutatorLock.newCondition();
 
-		m_dataPointWriteBuffer = new WriteBuffer<DataPointsRowKey, Integer, ByteBuffer>(
-				m_keyspace, CF_DATA_POINTS, writeDelay, maxWriteSize,
-				DATA_POINTS_ROW_KEY_SERIALIZER,
-				IntegerSerializer.get(),
-				ByteBufferSerializer.get(),
-				new WriteBufferStats()
-				{
-					@Override
-					public void saveWriteSize(int pendingWrites)
+			m_dataPointWriteBuffer = new WriteBuffer<DataPointsRowKey, Integer, ByteBuffer>(
+					m_keyspace, CF_DATA_POINTS, writeDelay, maxWriteSize,
+					DATA_POINTS_ROW_KEY_SERIALIZER,
+					IntegerSerializer.get(),
+					ByteBufferSerializer.get(),
+					new WriteBufferStats()
 					{
-						DataPointSet dps = new DataPointSet("kairosdb.datastore.write_size");
-						dps.addTag("host", hostname);
-						dps.addTag("buffer", CF_DATA_POINTS);
-						dps.addDataPoint(new DataPoint(System.currentTimeMillis(), pendingWrites));
-						putDataPoints(dps);
-					}
-				}, mutatorLock, lockCondition);
+						@Override
+						public void saveWriteSize(int pendingWrites)
+						{
+							DataPointSet dps = new DataPointSet("kairosdb.datastore.write_size");
+							dps.addTag("host", hostname);
+							dps.addTag("buffer", CF_DATA_POINTS);
+							dps.addDataPoint(new DataPoint(System.currentTimeMillis(), pendingWrites));
+							putDataPoints(dps);
+						}
+					}, mutatorLock, lockCondition);
 
-		m_rowKeyWriteBuffer = new WriteBuffer<String, DataPointsRowKey, String>(
-				m_keyspace, CF_ROW_KEY_INDEX, writeDelay, maxWriteSize,
-				StringSerializer.get(),
-				DATA_POINTS_ROW_KEY_SERIALIZER,
-				StringSerializer.get(),
-				new WriteBufferStats()
-				{
-					@Override
-					public void saveWriteSize(int pendingWrites)
+			m_rowKeyWriteBuffer = new WriteBuffer<String, DataPointsRowKey, String>(
+					m_keyspace, CF_ROW_KEY_INDEX, writeDelay, maxWriteSize,
+					StringSerializer.get(),
+					DATA_POINTS_ROW_KEY_SERIALIZER,
+					StringSerializer.get(),
+					new WriteBufferStats()
 					{
-						DataPointSet dps = new DataPointSet("kairosdb.datastore.write_size");
-						dps.addTag("host", hostname);
-						dps.addTag("buffer", CF_ROW_KEY_INDEX);
-						dps.addDataPoint(new DataPoint(System.currentTimeMillis(), pendingWrites));
-						putDataPoints(dps);
-					}
-				}, mutatorLock, lockCondition);
+						@Override
+						public void saveWriteSize(int pendingWrites)
+						{
+							DataPointSet dps = new DataPointSet("kairosdb.datastore.write_size");
+							dps.addTag("host", hostname);
+							dps.addTag("buffer", CF_ROW_KEY_INDEX);
+							dps.addDataPoint(new DataPoint(System.currentTimeMillis(), pendingWrites));
+							putDataPoints(dps);
+						}
+					}, mutatorLock, lockCondition);
 
-		m_stringIndexWriteBuffer = new WriteBuffer<String, String, String>(
-				m_keyspace, CF_STRING_INDEX, writeDelay, maxWriteSize,
-				StringSerializer.get(),
-				StringSerializer.get(),
-				StringSerializer.get(),
-				new WriteBufferStats()
-				{
-					@Override
-					public void saveWriteSize(int pendingWrites)
+			m_stringIndexWriteBuffer = new WriteBuffer<String, String, String>(
+					m_keyspace, CF_STRING_INDEX, writeDelay, maxWriteSize,
+					StringSerializer.get(),
+					StringSerializer.get(),
+					StringSerializer.get(),
+					new WriteBufferStats()
 					{
-						DataPointSet dps = new DataPointSet("kairosdb.datastore.write_size");
-						dps.addTag("host", hostname);
-						dps.addTag("buffer", CF_STRING_INDEX);
-						dps.addDataPoint(new DataPoint(System.currentTimeMillis(), pendingWrites));
-						putDataPoints(dps);
-					}
-				}, mutatorLock, lockCondition);
+						@Override
+						public void saveWriteSize(int pendingWrites)
+						{
+							DataPointSet dps = new DataPointSet("kairosdb.datastore.write_size");
+							dps.addTag("host", hostname);
+							dps.addTag("buffer", CF_STRING_INDEX);
+							dps.addDataPoint(new DataPoint(System.currentTimeMillis(), pendingWrites));
+							putDataPoints(dps);
+						}
+					}, mutatorLock, lockCondition);
+		}
+		catch (HectorException e)
+		{
+			throw new DatastoreException(e);
+		}
 	}
 
 	private void createSchema(int replicationFactor)
@@ -201,6 +210,12 @@ public class CassandraDatastore extends Datastore
 		m_cluster.addKeyspace(newKeyspace, true);
 	}
 
+	public void increaseMaxBufferSizes()
+	{
+		m_dataPointWriteBuffer.increaseMaxBufferSize();
+		m_rowKeyWriteBuffer.increaseMaxBufferSize();
+		m_stringIndexWriteBuffer.increaseMaxBufferSize();
+	}
 
 	@Override
 	public void close() throws InterruptedException
@@ -349,7 +364,7 @@ public class CassandraDatastore extends Datastore
 	}
 
 	@Override
-	protected List<DataPointRow> queryDatabase(DatastoreMetricQuery query, CachedSearchResult cachedSearchResult)
+	public List<DataPointRow> queryDatabase(DatastoreMetricQuery query, CachedSearchResult cachedSearchResult)
 	{
 		ListMultimap<Long, DataPointsRowKey> rowKeys = getKeysForQuery(query);
 
@@ -359,11 +374,16 @@ public class CassandraDatastore extends Datastore
 		{
 			List<DataPointsRowKey> tierKeys = rowKeys.get(ts);
 
-			QueryRunner qRunner = new QueryRunner(m_keyspace, CF_DATA_POINTS, tierKeys,
-					query.getStartTime(), query.getEndTime(), cachedSearchResult, m_singleRowReadSize,
-					m_multiRowReadSize);
+			for (int keyChunk = 0; keyChunk < tierKeys.size(); keyChunk += m_multiRowSize)
+			{
+				int chunkEnd = (keyChunk + m_multiRowSize > tierKeys.size() ? tierKeys.size() : keyChunk + m_multiRowSize);
 
-			runners.add(qRunner);
+				QueryRunner qRunner = new QueryRunner(m_keyspace, CF_DATA_POINTS, tierKeys.subList(keyChunk, chunkEnd),
+						query.getStartTime(), query.getEndTime(), cachedSearchResult, m_singleRowReadSize,
+						m_multiRowReadSize);
+
+				runners.add(qRunner);
+			}
 		}
 
 
@@ -384,6 +404,12 @@ public class CassandraDatastore extends Datastore
 		}
 
 		return cachedSearchResult.getRows();
+	}
+
+	@Override
+	public void deleteDataPoints(DatastoreMetricQuery deleteQuery) throws DatastoreException
+	{
+		//To change body of implemented methods use File | Settings | File Templates.
 	}
 
 	/**
@@ -420,7 +446,6 @@ public class CassandraDatastore extends Datastore
 						startKey, endKey, false, m_singleRowReadSize);
 
 		SetMultimap<String, String> filterTags = query.getTags();
-		System.out.println("FilterTags: "+filterTags);
 		outer: while (iterator.hasNext())
 		{
 			DataPointsRowKey rowKey = iterator.next().getName();

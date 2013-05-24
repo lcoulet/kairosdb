@@ -16,17 +16,13 @@
 
 package org.kairosdb.datastore.h2;
 
-import com.google.common.collect.SetMultimap;
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
 import genorm.runtime.GenOrmQueryResultSet;
 import org.kairosdb.core.DataPointSet;
+import org.kairosdb.core.datastore.*;
 import org.kairosdb.core.exception.DatastoreException;
 import org.h2.jdbcx.JdbcDataSource;
-import org.kairosdb.core.datastore.CachedSearchResult;
-import org.kairosdb.core.datastore.DataPointRow;
-import org.kairosdb.core.datastore.Datastore;
-import org.kairosdb.core.datastore.DatastoreMetricQuery;
 import org.kairosdb.datastore.h2.orm.*;
 import org.kairosdb.datastore.h2.orm.DataPoint;
 import org.slf4j.Logger;
@@ -42,7 +38,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.*;
 
-public class H2Datastore extends Datastore
+public class H2Datastore implements Datastore
 {
 	public static final Logger logger = LoggerFactory.getLogger(H2Datastore.class);
 	public static final String DATABASE_PATH_PROPERTY = "kairosdb.datastore.h2.database_path";
@@ -203,8 +199,7 @@ public class H2Datastore extends Datastore
 		return (tagValues);
 	}
 
-	@Override
-	protected List<DataPointRow> queryDatabase(DatastoreMetricQuery query, CachedSearchResult cachedSearchResult)
+	private GenOrmQueryResultSet<? extends MetricIdResults> getMetricIdsForQuery(DatastoreMetricQuery query)
 	{
 		StringBuilder sb = new StringBuilder();
 
@@ -251,7 +246,13 @@ public class H2Datastore extends Datastore
 			idQuery = new MetricIdsQuery(query.getName()).runQuery();
 		}
 
+		return (idQuery);
+	}
 
+	@Override
+	public List<DataPointRow> queryDatabase(DatastoreMetricQuery query, CachedSearchResult cachedSearchResult)
+	{
+		GenOrmQueryResultSet<? extends MetricIdResults> idQuery = getMetricIdsForQuery(query);
 
 		List<DataPointRow> retList = new ArrayList<DataPointRow>();
 		while (idQuery.next())
@@ -278,6 +279,22 @@ public class H2Datastore extends Datastore
 
 		return (retList);
 
+	}
+
+	@Override
+	public void deleteDataPoints(DatastoreMetricQuery deleteQuery) throws DatastoreException
+	{
+		GenOrmQueryResultSet<? extends MetricIdResults> idQuery =
+				getMetricIdsForQuery(deleteQuery);
+
+		while (idQuery.next())
+		{
+			String metricId = idQuery.getRecord().getMetricId();
+
+			new DeleteMetricsQuery(metricId,
+					new Timestamp(deleteQuery.getStartTime()),
+					new Timestamp(deleteQuery.getEndTime())).runUpdate();
+		}
 	}
 
 	private String createMetricKey(DataPointSet dps)

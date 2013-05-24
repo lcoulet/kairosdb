@@ -24,7 +24,7 @@ import jcmdline.*;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.kairosdb.core.datastore.DataPointRow;
-import org.kairosdb.core.datastore.Datastore;
+import org.kairosdb.core.datastore.KairosDatastore;
 import org.kairosdb.core.datastore.QueryMetric;
 import org.kairosdb.core.exception.DatastoreException;
 import org.kairosdb.core.exception.KariosDBException;
@@ -51,8 +51,12 @@ public class Main
 			"file to save export to or read from depending on command", FileParam.NO_ATTRIBUTES,
 			FileParam.OPTIONAL);
 
+	/**
+	start is identical to run except that logging data only goes to the log file
+	and not to standard out as well
+	*/
 	private static StringParam s_operationCommand = new StringParam("c",
-			"command to run", new String[]{"run", "export", "import"});
+			"command to run", new String[]{"run", "start", "export", "import"});
 
 	private static Object s_shutdownObject = new Object();
 
@@ -182,11 +186,15 @@ public class Main
 
 			main.stopServices();
 		}
-		else if (operation.equals("run"))
+		else if (operation.equals("run") || operation.equals("start"))
 		{
 			try
 			{
 				main.startServices();
+
+				logger.info("------------------------------------------");
+				logger.info("     KairosDB service started");
+				logger.info("------------------------------------------");
 
 				Runtime.getRuntime().addShutdownHook(new Thread(new Runnable()
 				{
@@ -216,14 +224,22 @@ public class Main
 				main.stopServices();
 				System.exit(1);
 			}
+			finally
+			{
+				logger.info("--------------------------------------");
+				logger.info("     KairosDB service is now down!");
+				logger.info("--------------------------------------");
+			}
 		}
 	}
 
 	public void runExport(PrintStream out) throws DatastoreException, IOException
 	{
-		Datastore ds = m_injector.getInstance(Datastore.class);
+		KairosDatastore ds = m_injector.getInstance(KairosDatastore.class);
 
 		Iterable<String> metrics = ds.getMetricNames();
+
+		//metrics = Arrays.asList("gov_status_responsetime", "gov_status_downtime");
 
 		try
 		{
@@ -277,7 +293,7 @@ public class Main
 
 	public void runImport(InputStream in) throws IOException, JSONException, DatastoreException
 	{
-		Datastore ds = m_injector.getInstance(Datastore.class);
+		KairosDatastore ds = m_injector.getInstance(KairosDatastore.class);
 
 		BufferedReader reader = new BufferedReader(new InputStreamReader(in, UTF_8));
 
@@ -350,14 +366,15 @@ public class Main
 
 	public void stopServices() throws DatastoreException, InterruptedException
 	{
-		System.err.println("Shutting down");
+		logger.info("Shutting down");
 		for (KairosDBService service : m_services)
 		{
+			logger.info("Stopping "+service.getClass().getName());
 			service.stop();
 		}
 
 		//Stop the datastore
-		Datastore ds = m_injector.getInstance(Datastore.class);
+		KairosDatastore ds = m_injector.getInstance(KairosDatastore.class);
 		ds.close();
 	}
 }

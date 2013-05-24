@@ -13,10 +13,10 @@
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
  */
-package org.kairosdb.core.jobs;
+package org.kairosdb.datastore.cassandra;
 
 import com.google.inject.Inject;
-import com.google.inject.name.Named;
+import org.kairosdb.core.datastore.Datastore;
 import org.kairosdb.core.datastore.KairosDatastore;
 import org.kairosdb.core.scheduler.KairosDBJob;
 import org.quartz.CronScheduleBuilder;
@@ -26,20 +26,22 @@ import org.quartz.Trigger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.inject.Named;
+
 import static org.quartz.TriggerBuilder.newTrigger;
 
-public class CacheFileCleaner implements KairosDBJob
+public class IncreaseMaxBufferSizesJob implements KairosDBJob
 {
-	public static final Logger logger = LoggerFactory.getLogger(CacheFileCleaner.class);
-	public static final String CLEANING_SCHEDULE = "kairosdb.job.cache_file_cleaner_schedule";
+	public static final Logger logger = LoggerFactory.getLogger(IncreaseMaxBufferSizesJob.class);
+	public static final String SCHEDULE = "kairosdb.datastore.cassandra.increase_buffer_size_schedule";
 
-	private final KairosDatastore datastore;
+	private final CassandraDatastore datastore;
 	private String schedule;
 
 	@Inject
-	public CacheFileCleaner(@Named(CLEANING_SCHEDULE) String schedule, KairosDatastore datastore)
+	public IncreaseMaxBufferSizesJob(@Named(SCHEDULE) String schedule, Datastore datastore)
 	{
-		this.datastore = datastore;
+		this.datastore = (CassandraDatastore) datastore;
 		this.schedule = schedule;
 	}
 
@@ -47,7 +49,7 @@ public class CacheFileCleaner implements KairosDBJob
 	public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException
 	{
 		logger.debug("Executing job...");
-		datastore.cleanCacheDir();
+		datastore.increaseMaxBufferSizes();
 		logger.debug("Job Completed");
 	}
 
