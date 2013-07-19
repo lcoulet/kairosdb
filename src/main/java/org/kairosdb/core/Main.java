@@ -264,7 +264,7 @@ public class Main
 						JSONObject jsObj = new JSONObject();
 						jsObj.put("name", metric);
 						jsObj.put("time", dp.getTimestamp());
-
+                                                jsObj.put("meta", dp.getMetaValue());
 						if (dp.isInteger())
 						{
 							jsObj.put("int_value", true);
@@ -275,6 +275,7 @@ public class Main
 							jsObj.put("int_value", false);
 							jsObj.put("value", dp.getDoubleValue());
 						}
+                                                
 
 						jsObj.put("tags", tags);
 
@@ -316,9 +317,9 @@ public class Main
 
 			DataPoint dp;
 			if (metric.getBoolean("int_value"))
-				dp = new DataPoint(metric.getLong("time"), metric.getLong("value"));
+				dp = new DataPoint(metric.getLong("time"), metric.getLong("value"),metric.getLong("meta"));
 			else
-				dp = new DataPoint(metric.getLong("time"), metric.getDouble("value"));
+				dp = new DataPoint(metric.getLong("time"), metric.getDouble("value"),metric.getLong("meta"));
 
 			dps.addDataPoint(dp);
 
