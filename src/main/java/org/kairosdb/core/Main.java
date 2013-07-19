@@ -316,11 +316,17 @@ public class Main
 			}
 
 			DataPoint dp;
-			if (metric.getBoolean("int_value"))
-				dp = new DataPoint(metric.getLong("time"), metric.getLong("value"),metric.getLong("meta"));
-			else
-				dp = new DataPoint(metric.getLong("time"), metric.getDouble("value"),metric.getLong("meta"));
-
+			
+                        
+                        if (metric.getBoolean("int_value"))
+                            dp = new DataPoint(metric.getLong("time"), metric.getLong("value"));
+                        else
+                            dp = new DataPoint(metric.getLong("time"), metric.getDouble("value"));
+                        
+                        if (metric.has("meta")){
+                            dp = dp.withMeta(metric.getLong("meta"));
+                        }
+                        
 			dps.addDataPoint(dp);
 
 			ds.putDataPoints(dps);

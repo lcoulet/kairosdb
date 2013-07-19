@@ -56,6 +56,10 @@ public class DataPoint implements Comparable<DataPoint>
 		this(timestamp,value);
                 m_metaValue = metaValue;
 	}
+        
+        public DataPoint withMeta(long metaValue){
+            return isInteger()? new DataPoint(m_timestamp, m_longValue, metaValue) : new DataPoint(m_timestamp, m_doubleValue, metaValue);
+        }
 
 	/**
 	 Get the timestamp for this data point in milliseconds
