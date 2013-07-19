@@ -29,6 +29,7 @@ public class DataPoint implements Comparable<DataPoint>
 	private boolean m_isInteger;
 	private long m_longValue;
 	private double m_doubleValue;
+        private long m_metaValue;
 
 	public DataPoint(long timestamp, long value)
 	{
@@ -42,6 +43,18 @@ public class DataPoint implements Comparable<DataPoint>
 		m_isInteger = false;
 		m_timestamp = timestamp;
 		m_doubleValue = value;
+	}
+        
+        public DataPoint(long timestamp, long value, long metaValue)
+	{
+		this(timestamp,value);
+                m_metaValue = metaValue;
+	}
+        
+        public DataPoint(long timestamp, double  value, long metaValue)
+	{
+		this(timestamp,value);
+                m_metaValue = metaValue;
 	}
 
 	/**
@@ -67,8 +80,12 @@ public class DataPoint implements Comparable<DataPoint>
 	{
 		return m_isInteger ? m_longValue : (long)m_doubleValue;
 	}
-
-
+        
+	public long getMetaValue()
+	{
+		return m_metaValue;
+	}
+        
 	@Override
 	public String toString()
 	{
