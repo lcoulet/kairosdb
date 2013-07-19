@@ -29,7 +29,7 @@ public class DataPoint implements Comparable<DataPoint>
 	private boolean m_isInteger;
 	private long m_longValue;
 	private double m_doubleValue;
-        private long m_metaValue;
+        private long m_metaValue=0L;
 
 	public DataPoint(long timestamp, long value)
 	{

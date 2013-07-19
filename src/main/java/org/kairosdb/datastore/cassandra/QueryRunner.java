@@ -137,17 +137,18 @@ public class QueryRunner
 		for (HColumn<Integer, ByteBuffer> column : columns)
 		{
 			int columnTime = column.getName();
+                        long meta = column.getClock();
 
 			ByteBuffer value = column.getValue();
 			if (isLongValue(columnTime))
 			{
 				m_cachedResults.addDataPoint(getColumnTimestamp(rowKey.getTimestamp(),
-						columnTime), ValueSerializer.getLongFromByteBuffer(value));
+						columnTime), ValueSerializer.getLongFromByteBuffer(value), meta);
 			}
 			else
 			{
 				m_cachedResults.addDataPoint(getColumnTimestamp(rowKey.getTimestamp(),
-						columnTime), ValueSerializer.getDoubleFromByteBuffer(value));
+						columnTime), ValueSerializer.getDoubleFromByteBuffer(value), meta);
 			}
 		}
 	}

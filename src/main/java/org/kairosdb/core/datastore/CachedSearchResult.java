@@ -30,7 +30,7 @@ public class CachedSearchResult
 {
 	public static final Logger logger = LoggerFactory.getLogger(CachedSearchResult.class);
 
-	public static final int DATA_POINT_SIZE = 8 + 1 + 8; //timestamp + type flag + value
+	public static final int DATA_POINT_SIZE = 8 + 1 + 8 + 8; //timestamp + type flag + value + meta
 	public static final int READ_BUFFER_SIZE = 60; //The number of datapoints to read into each buffer we could potentially have a lot of these so we keep them smaller
 	public static final int WRITE_BUFFER_SIZE = 500;
 
@@ -221,6 +221,9 @@ public class CachedSearchResult
 		}
 	}
 
+        /**
+         * @deprecated missing meta field
+         */
 	public void addDataPoint(long timestamp, long value) throws IOException
 	{
 		if (!m_writeBuffer.hasRemaining())
@@ -230,9 +233,13 @@ public class CachedSearchResult
 		m_writeBuffer.putLong(timestamp);
 		m_writeBuffer.put(LONG_FLAG);
 		m_writeBuffer.putLong(value);
+                m_writeBuffer.putLong(1L);
 	}
 
-	public void addDataPoint(long timestamp, double value) throws IOException
+	/**
+         * @deprecated missing meta field
+         */
+        public void addDataPoint(long timestamp, double value) throws IOException
 	{
 		if (!m_writeBuffer.hasRemaining())
 		{
@@ -241,6 +248,31 @@ public class CachedSearchResult
 		m_writeBuffer.putLong(timestamp);
 		m_writeBuffer.put(DOUBLE_FLAG);
 		m_writeBuffer.putDouble(value);
+                m_writeBuffer.putLong(1L);
+	}
+        
+        public void addDataPoint(long timestamp, long value, long meta) throws IOException
+	{
+		if (!m_writeBuffer.hasRemaining())
+		{
+			flushWriteBuffer();
+		}
+		m_writeBuffer.putLong(timestamp);
+		m_writeBuffer.put(LONG_FLAG);
+		m_writeBuffer.putLong(value);
+                m_writeBuffer.putLong(meta);
+	}
+
+	public void addDataPoint(long timestamp, double value, long meta) throws IOException
+	{
+		if (!m_writeBuffer.hasRemaining())
+		{
+			flushWriteBuffer();
+		}
+		m_writeBuffer.putLong(timestamp);
+		m_writeBuffer.put(DOUBLE_FLAG);
+		m_writeBuffer.putDouble(value);
+                m_writeBuffer.putLong(meta);
 	}
 
 	public List<DataPointRow> getRows()
@@ -374,12 +406,12 @@ public class CachedSearchResult
 					return (null);
 
 				long timestamp = m_readBuffer.getLong();
-				byte flag = m_readBuffer.get();
+				byte flag = m_readBuffer.get();                                
 				if (flag == LONG_FLAG)
-					ret = new DataPoint(timestamp, m_readBuffer.getLong());
+					ret = new DataPoint(timestamp, m_readBuffer.getLong(),m_readBuffer.getLong());
 				else
-					ret = new DataPoint(timestamp, m_readBuffer.getDouble());
-
+					ret = new DataPoint(timestamp, m_readBuffer.getDouble(),m_readBuffer.getLong());
+                                
 			}
 			catch (IOException ioe)
 			{

@@ -277,15 +277,16 @@ public class CassandraDatastore implements Datastore
 				}
 
 				int columnTime = getColumnName(rowTime, dp.getTimestamp(), dp.isInteger());
+                                long versionTimestamp= dp.getMetaValue() == 0? writeTime : dp.getMetaValue();
 				if (dp.isInteger())
 				{
 					m_dataPointWriteBuffer.addData(rowKey, columnTime,
-							ValueSerializer.toByteBuffer(dp.getLongValue()), writeTime);
+							ValueSerializer.toByteBuffer(dp.getLongValue()), versionTimestamp);
 				}
 				else
 				{
 					m_dataPointWriteBuffer.addData(rowKey, columnTime,
-							ValueSerializer.toByteBuffer((float)dp.getDoubleValue()), writeTime);
+							ValueSerializer.toByteBuffer((float)dp.getDoubleValue()), versionTimestamp);
 				}
 			}
 		}
@@ -294,6 +295,8 @@ public class CassandraDatastore implements Datastore
 			e.printStackTrace();
 		}
 	}
+        
+        
 
 	@Override
 	public Iterable<String> getMetricNames()
