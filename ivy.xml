@@ -67,6 +67,11 @@
 
 		<!-- Quartz -->
 		<dependency org="org.quartz-scheduler" name="quartz" rev="2.1.7" />
+        
+        <!-- MessagePack -->
+		<dependency org="org.msgpack" name="msgpack" rev="0.6.7"/>
+        
+
 
 	</dependencies>
 </ivy-module>
