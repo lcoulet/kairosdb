@@ -224,6 +224,45 @@ public class JsonMetricParserTest
 		assertThat(dataPointSetList.get(1).getDataPoints().get(0).getTimestamp(), equalTo(1349109378L));
 		assertThat(dataPointSetList.get(1).getDataPoints().get(0).getLongValue(), equalTo(321L));
 	}
+        
+        @Test
+	public void test_validJsonWithDatapointsAndMeta() throws DatastoreException, IOException, ValidationException
+	{
+		String json = Resources.toString(Resources.getResource("json-metric-parser-multiple-metric-with-meta.json"), Charsets.UTF_8);
+
+		FakeDataStore fakeds = new FakeDataStore();
+		KairosDatastore datastore = new KairosDatastore(fakeds, new QueryQueuingManager(1, "hostname"),
+				Collections.<DataPointListener>emptyList(), "hostname");
+		JsonMetricParser parser = new JsonMetricParser(datastore, new ByteArrayInputStream(json.getBytes()));
+
+		parser.parse();
+
+		List<DataPointSet> dataPointSetList = fakeds.getDataPointSetList();
+		assertThat(dataPointSetList.size(), equalTo(2));
+
+		assertThat(dataPointSetList.get(0).getName(), equalTo("archive_file_tracked"));
+		assertThat(dataPointSetList.get(0).getTags().size(), equalTo(1));
+		assertThat(dataPointSetList.get(0).getTags().get("host"), equalTo("server1"));
+		assertThat(dataPointSetList.get(0).getDataPoints().size(), equalTo(3));
+		assertThat(dataPointSetList.get(0).getDataPoints().get(0).getTimestamp(), equalTo(1349109376L));
+		assertThat(dataPointSetList.get(0).getDataPoints().get(0).getLongValue(), equalTo(123L));
+                assertThat(dataPointSetList.get(0).getDataPoints().get(0).getMetaValue(), equalTo(0L));
+		assertThat(dataPointSetList.get(0).getDataPoints().get(1).getTimestamp(), equalTo(1349109377L));
+		assertThat(dataPointSetList.get(0).getDataPoints().get(1).getDoubleValue(), equalTo(13.2));
+                assertThat(dataPointSetList.get(0).getDataPoints().get(1).getMetaValue(), equalTo(1L));
+		assertThat(dataPointSetList.get(0).getDataPoints().get(2).getTimestamp(), equalTo(1349109378L));
+		assertThat(dataPointSetList.get(0).getDataPoints().get(2).getDoubleValue(), equalTo(23.1));
+                assertThat(dataPointSetList.get(0).getDataPoints().get(2).getMetaValue(), equalTo(2L));
+
+		assertThat(dataPointSetList.get(1).getName(), equalTo("archive_file_search"));
+		assertThat(dataPointSetList.get(1).getTags().size(), equalTo(2));
+		assertThat(dataPointSetList.get(1).getTags().get("host"), equalTo("server2"));
+		assertThat(dataPointSetList.get(1).getTags().get("customer"), equalTo("Acme"));
+		assertThat(dataPointSetList.get(1).getDataPoints().size(), equalTo(1));
+		assertThat(dataPointSetList.get(1).getDataPoints().get(0).getTimestamp(), equalTo(1349109378L));
+		assertThat(dataPointSetList.get(1).getDataPoints().get(0).getLongValue(), equalTo(321L));
+                assertThat(dataPointSetList.get(1).getDataPoints().get(0).getMetaValue(), equalTo(3L));
+	}
 
 	private static class FakeDataStore implements Datastore
 	{

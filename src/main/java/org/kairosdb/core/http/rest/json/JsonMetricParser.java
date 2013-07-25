@@ -160,11 +160,18 @@ public class JsonMetricParser
 
 			String value = reader.nextString();
 			JsonValidator.validateNotNullOrEmpty("value", value);
-
-			if (value.contains("."))
-				dataPoints.add(new DataPoint(timestamp, Double.parseDouble(value)));
-			else
-				dataPoints.add(new DataPoint(timestamp, Long.parseLong(value)));
+                        DataPoint dp;
+                        if (value.contains("."))
+                                    dp = new DataPoint(timestamp, Double.parseDouble(value));
+                            else
+                                    dp = new DataPoint(timestamp, Long.parseLong(value));
+                        
+			if(reader.hasNext()){                            
+                            dp=dp.withMeta(reader.nextLong());
+                        }
+                        
+                        dataPoints.add(dp);
+                        
 			reader.endArray();
 		}
 		reader.endArray();
