@@ -254,7 +254,7 @@ public class CassandraDatastore implements Datastore
 				if (dp.getTimestamp() < 0)
 					throw new DatastoreException("Timestamp must be greater than or equal to zero.");
 				long newRowTime = calculateRowTime(dp.getTimestamp());
-				if (newRowTime != rowTime || rowKey == null)
+				if (newRowTime != rowTime)
 				{
 					rowTime = newRowTime;
 					rowKey = new DataPointsRowKey(dps.getName(), rowTime, dps.getTags());
