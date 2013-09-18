@@ -9,6 +9,7 @@
 <head>
 	<link href="css/cupertino/jquery-ui-1.10.0.custom.css" rel="stylesheet">
 	<link href="css/style.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="favicon.png" />
 
 	<script src="js/jquery.1.9.0.min.js"></script>
 	<script src="js/kairosdb.js"></script>
@@ -135,7 +136,8 @@
 
 <body>
 
-<H2 class="header">KairosDB</H2>
+<H1 class="header"><IMG src="skyminer_web_ui.png" alt="Skyminer Web UI" title="Skyminer Web UI" /></H1>
+
 
 <span class="header ui-widget">Time Range</span>
 
@@ -395,10 +397,10 @@
 		</div>
 		<div>
 			<div style="display: table-cell" class="aggregatorSampling"> 
-				<span class="header" style="margin-left: 10px; vertical-align: top;">Sampling</span>
+				<span class="header" style="margin-left: 30px; vertical-align: top;">Sampling</span>
 			</div>
 			<div style="display: table-cell" class="aggregatorSampling">
-				<input class="ui-widget aggregatorSamplingValue" style="width: 20px; margin-left: 10px;" type="text"
+				<input class="ui-widget aggregatorSamplingValue" style="width: 30px; margin-left: 10px;" type="text"
 				       value="1">
 			</div>
 			<div style="display: table-cell;">
@@ -413,13 +415,6 @@
 					<option value="milliseconds" selected="selected">Milliseconds</option>
 				</select>
 			</div>
-            <div style="display: table-cell" class="aggregatorPercentile">
-                <span class="header" style="margin-left: 10px; vertical-align: top;">Percentile</span>
-            </div>
-            <div style="display: table-cell" class="aggregatorPercentile">
-                <input class="ui-widget aggregatorPercentileValue" style="width: 40px; margin-left: 10px;" type="text"
-                       value="0.75">
-            </div>
 		</div>
 	</div>
 </div>
