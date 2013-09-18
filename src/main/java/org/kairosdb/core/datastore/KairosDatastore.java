@@ -20,6 +20,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
+import org.kairosdb.core.DataPoint;
 import org.kairosdb.core.DataPointListener;
 import org.kairosdb.core.DataPointSet;
 import org.kairosdb.core.aggregator.Aggregator;
@@ -41,23 +42,33 @@ import java.util.*;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static org.kairosdb.util.Preconditions.checkNotNullOrEmpty;
 
 public class KairosDatastore
 {
 	public static final Logger logger = LoggerFactory.getLogger(KairosDatastore.class);
 	public static final String QUERY_CACHE_DIR = "kairosdb.query_cache.cache_dir";
+	public static final String QUERY_METRIC_TIME = "kairosdb.datastore.query_time";
+	public static final String QUERIES_WAITING_METRIC_NAME = "kairosdb.datastore.queries_waiting";
+
+	private final Datastore m_datastore;
+	private final QueryQueuingManager m_queuingManager;
+	private final List<DataPointListener> m_dataPointListeners;
+	private final String m_hostname;
 
 	private String m_baseCacheDir;
 	private volatile String m_cacheDir;
-	private Datastore m_datastore;
-	private List<DataPointListener> m_dataPointListeners;
 
 	@SuppressWarnings("ResultOfMethodCallIgnored")
 	@Inject
-	public KairosDatastore(Datastore datastore, List<DataPointListener> dataPointListeners) throws DatastoreException
+	public KairosDatastore(Datastore datastore, QueryQueuingManager queuingManager,
+	                       List<DataPointListener> dataPointListeners, @Named("HOSTNAME") String hostname)
+			throws DatastoreException
 	{
-		m_datastore = datastore;
-		m_dataPointListeners = dataPointListeners;
+		m_datastore = checkNotNull(datastore);
+		m_dataPointListeners = checkNotNull(dataPointListeners);
+		m_queuingManager = checkNotNull(queuingManager);
+		m_hostname = checkNotNullOrEmpty(hostname);
 
 		m_baseCacheDir = System.getProperty("java.io.tmpdir") + "/kairos_cache/";
 
@@ -208,12 +219,18 @@ public class KairosDatastore
 	{
 		checkNotNull(metric);
 
+		long queryStartTime = System.currentTimeMillis();
+
+		QueryResults results;
 		CachedSearchResult cachedResults = null;
 
 		List<DataPointRow> returnedRows = null;
 		try
 		{
 			String cacheFilename = calculateFilenameHash(metric);
+			results = new QueryResults(m_queuingManager, cacheFilename);
+			m_queuingManager.waitForTimeToRun(cacheFilename);
+
 			String tempFile = m_cacheDir + cacheFilename;
 
 			if (metric.getCacheTime() > 0)
@@ -270,7 +287,20 @@ public class KairosDatastore
 			aggregatedResults.add(aggregatedGroup);
 		}
 
-		return new QueryResults(aggregatedResults);
+		results.addDataPoints(aggregatedResults);
+
+		DataPointSet dps = new DataPointSet(QUERY_METRIC_TIME);
+		dps.addTag("host", m_hostname);
+		dps.addTag("metric_name", metric.getName());
+		dps.addDataPoint(new DataPoint(queryStartTime, System.currentTimeMillis() - queryStartTime));
+		putDataPoints(dps);
+
+		DataPointSet waitingSet = new DataPointSet(QUERIES_WAITING_METRIC_NAME);
+		waitingSet.addTag("host", m_hostname);
+		waitingSet.addDataPoint(new DataPoint(queryStartTime, m_queuingManager.getQueryWaitingCount()));
+		putDataPoints(waitingSet);
+
+		return results;
 	}
 
 	public void delete(QueryMetric metric) throws DatastoreException
@@ -279,8 +309,8 @@ public class KairosDatastore
 
 		try
 		{
-			String cacheFilename = calculateFilenameHash(metric);
-			String tempFile = m_cacheDir + cacheFilename + "_delete";
+			String cacheFilename = UUID.randomUUID().toString();
+			String tempFile = m_cacheDir + cacheFilename;
 			CachedSearchResult cachedResults = CachedSearchResult.createCachedSearchResult(metric.getName(), tempFile);
 			m_datastore.deleteDataPoints(metric, cachedResults);
 		}

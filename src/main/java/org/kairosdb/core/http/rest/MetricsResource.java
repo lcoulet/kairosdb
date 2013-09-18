@@ -194,7 +194,8 @@ public class MetricsResource
 				}
 				finally
 				{
-					qr.close();
+					if (qr != null)
+						qr.close();
 				}
 			}
 
@@ -304,6 +305,26 @@ public class MetricsResource
 		return (corsPreflightQuery(requestHeaders, requestMethod));
 	}
 
+	@DELETE
+	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+	@Path("/metric/{metricName}")
+	public Response metricDelete(@PathParam("metricName") String metricName) throws Exception
+	{
+		try
+		{
+			QueryMetric query = new QueryMetric(0L, Long.MAX_VALUE, 0, metricName);
+			datastore.delete(query);
+
+			ResponseBuilder responseBuilder = Response.status(Response.Status.NO_CONTENT);
+			responseBuilder.header("Access-Control-Allow-Origin", "*");
+			return responseBuilder.build();
+		}
+		catch (Exception e)
+		{
+			log.error("Delete failed.", e);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
+		}
+	}
 
 	private Response executeNameQuery(NameType type)
 	{
@@ -382,7 +403,7 @@ public class MetricsResource
 			InputStream reader = new FileInputStream(m_responseFile);
 
 			byte[] buffer = new byte[1024];
-			int size = 0;
+			int size;
 
 			while ((size = reader.read(buffer)) != -1)
 			{
