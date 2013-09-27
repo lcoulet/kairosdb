@@ -11,6 +11,7 @@ import tablesaw.addons.GZipRule
 import tablesaw.addons.TarRule
 import tablesaw.addons.ivy.IvyAddon
 import tablesaw.addons.java.Classpath
+import tablesaw.addons.java.JavaCRule
 import tablesaw.addons.java.JavaProgram
 import tablesaw.addons.junit.JUnitRule
 import tablesaw.rules.DirectoryRule
@@ -21,9 +22,11 @@ import javax.swing.*
 
 println("===============================================");
 
+saw.setProperty(Tablesaw.PROP_MULTI_THREAD_OUTPUT, Tablesaw.PROP_VALUE_ON)
+
 programName = "kairosdb"
 //Do not use '-' in version string, it breaks rpm uninstall.
-version = "0.9.0"
+version = "0.9.1"
 release = "1" //package release number
 summary = "KairosDB"
 description = """\
@@ -39,7 +42,7 @@ versionSource = "$versionSourceDir/KairosVersion.java"
 saw = Tablesaw.getCurrentTablesaw()
 saw.includeDefinitionFile("definitions.xml")
 
-ivyConfig = ["default"]
+ivyConfig = ["default", "integration"]
 
 
 rpmDir = "build/rpm"
@@ -50,7 +53,12 @@ rpmNoDepDirRule = new DirectoryRule(rpmNoDepDir)
 
 ivy = new IvyAddon().setup()
 
+buildLibraries = new RegExFileSet("lib", ".*\\.jar").recurse()
+		.addExcludeDir("integration")
+		.getFullFilePaths()
+
 jp = new JavaProgram().setProgramName(programName)
+		.setLibraryJars(buildLibraries)
 		.setup()
 
 jp.getCompileRule().getDefinition().set("target", "1.6")
@@ -111,7 +119,8 @@ if (saw.getProperty("jacoco", "false").equals("true"))
 	junit.addJvmArgument("-javaagent:lib_test/jacocoagent.jar=destfile=build/jacoco.exec")
 
 testSourcesAll = new RegExFileSet("src/test/java", ".*Test\\.java").recurse().getFilePaths()
-junitAll = new JUnitRule("junit-test-all").addSources(testSourcesAll)
+junitAll = new JUnitRule("junit-test-all").setDescription("Run unit tests including Cassandra and HBase tests")
+		.addSources(testSourcesAll)
 		.setClasspath(junitClasspath)
 		.addDepends(testCompileRule)
 
@@ -151,6 +160,8 @@ gzipRule = new GZipRule("package").setSource(tarRule.getTarget())
 		.setTarget("build/${programName}-${version}.tar.gz")
 		.addDepend(tarRule)
 
+//------------------------------------------------------------------------------
+//Build rpm file
 rpmBaseInstallDir = "/opt/$programName"
 rpmRule = new SimpleRule("package-rpm").setDescription("Build RPM Package")
 		.addDepend(jp.getJarRule())
@@ -167,6 +178,7 @@ new SimpleRule("package-rpm-nodep").setDescription("Build RPM Package with no de
 
 def doRPM(Rule rule)
 {
+	//Build rpm using redline rpm library
 	host = InetAddress.getLocalHost().getHostName()
 	rpmBuilder = new Builder()
 	rpmBuilder.with
@@ -199,7 +211,7 @@ def doRPM(Rule rule)
 
 	rpmBuilder.addFile("/etc/init.d/kairosdb", new File("src/scripts/kairosdb-service.sh"), 0755)
 	rpmBuilder.addFile("$rpmBaseInstallDir/conf/kairosdb.properties",
-			new File("src/main/resources/kairosdb.properties"), 0644, Directive.CONFIG)
+			new File("src/main/resources/kairosdb.properties"), 0644, new Directive(Directive.RPMFILE_CONFIG | Directive.RPMFILE_NOREPLACE))
 
 	for (AbstractFileSet.File f : webrootFileSet.getFiles())
 		rpmBuilder.addFile("$rpmBaseInstallDir/webroot/$f.file", new File(f.getBaseDir(), f.getFile()))
@@ -249,7 +261,7 @@ def doDeb(Rule rule)
 
 
 //------------------------------------------------------------------------------
-//Run the tsd application
+//Run the Kairos application
 new SimpleRule("run-debug").setDescription("Runs kairosdb so a debugger can attach to port 5005")
 		.addDepends(jp.getJarRule())
 		.setMakeAction("doRun")
@@ -292,6 +304,28 @@ def doGenorm(Rule rule)
 	genormDefinition.set("source", "src/main/conf/tables.xml");
 	cmd = genormDefinition.getCommand();
 	saw.exec(cmd);
+}
+
+
+//------------------------------------------------------------------------------
+//Build Integration tests
+integrationClassPath = new Classpath(jp.getLibraryJars())
+		.addPaths(new RegExFileSet("lib/ivy/integration", ".*\\.jar").getFullFilePaths())
+		.addPath("src/integration-test/resources")
+
+integrationBuildRule = new JavaCRule("build/integration")
+		.addSourceDir("src/integration-test/java")
+		.addClasspath(integrationClassPath)
+
+new SimpleRule("integration")
+		.setMakeAction("doIntegration")
+		.addDepend(integrationBuildRule)
+
+def doIntegration(Rule rule)
+{
+	host = saw.getProperty("host", "127.0.0.1")
+	port = saw.getProperty("port", "8080")
+	saw.exec("java  -Dhost=${host} -Dport=${port} -cp ${integrationBuildRule.classpath} org.testng.TestNG src/integration-test/testng.xml")
 }
 
 
