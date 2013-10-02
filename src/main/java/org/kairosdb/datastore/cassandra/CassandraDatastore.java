@@ -37,10 +37,7 @@ import me.prettyprint.hector.api.query.CountQuery;
 import me.prettyprint.hector.api.query.SliceQuery;
 import org.kairosdb.core.DataPoint;
 import org.kairosdb.core.DataPointSet;
-import org.kairosdb.core.datastore.CachedSearchResult;
-import org.kairosdb.core.datastore.DataPointRow;
-import org.kairosdb.core.datastore.Datastore;
-import org.kairosdb.core.datastore.DatastoreMetricQuery;
+import org.kairosdb.core.datastore.*;
 import org.kairosdb.core.exception.DatastoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -292,7 +289,7 @@ public class CassandraDatastore implements Datastore
 				}
 
 				int columnTime = getColumnName(rowTime, dp.getTimestamp(), dp.isInteger());
-                                long versionTimestamp= dp.getMetaValue() == 0? writeTime : dp.getMetaValue();
+				long versionTimestamp= dp.getMetaValue() == 0? writeTime : dp.getMetaValue();
 				if (dp.isInteger())
 				{
 					m_dataPointWriteBuffer.addData(rowKey, columnTime,
@@ -301,7 +298,7 @@ public class CassandraDatastore implements Datastore
 				else
 				{
 					m_dataPointWriteBuffer.addData(rowKey, columnTime,
-							ValueSerializer.toByteBuffer((float)dp.getDoubleValue()), versionTimestamp);
+						ValueSerializer.toByteBuffer((float)dp.getDoubleValue()), versionTimestamp);
 				}
 			}
 		}
@@ -378,6 +375,23 @@ public class CassandraDatastore implements Datastore
 			ret.add(columnIterator.next().getName());
 
 		return (ret);
+	}
+
+	@Override
+	public TagSet queryMetricTags(DatastoreMetricQuery query)
+	{
+		TagSetImpl tagSet = new TagSetImpl();
+		ListMultimap<Long, DataPointsRowKey> rowKeys = getKeysForQuery(query);
+
+		for (DataPointsRowKey dataPointsRowKey : rowKeys.values())
+		{
+			for (Map.Entry<String, String> tag : dataPointsRowKey.getTags().entrySet())
+			{
+				tagSet.addTag(tag.getKey(), tag.getValue());
+			}
+		}
+
+		return (tagSet);
 	}
 
 	@Override

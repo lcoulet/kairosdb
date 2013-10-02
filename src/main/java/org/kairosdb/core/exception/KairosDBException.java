@@ -13,28 +13,22 @@
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
  */
+package org.kairosdb.core.exception;
 
-package org.kairosdb.core.http.rest.validation;
-
-public class JsonValidator
+public class KairosDBException extends Exception
 {
-	private JsonValidator()
+	public KairosDBException(String message)
 	{
+		super(message);
 	}
 
-
-	public static void validateNotNullOrEmpty(String name, String value) throws ValidationException
+	public KairosDBException(String message, Throwable cause)
 	{
-		if (value == null)
-			throw new ValidationException(name + " may not be null.");
-		if (value.isEmpty())
-			throw new ValidationException(name + " may not be empty.");
+		super(message, cause);
 	}
 
-	public static void validateMin(String name, long value, long minValue) throws ValidationException
+	public KairosDBException(Throwable cause)
 	{
-		if (value < minValue)
-			throw new ValidationException(name + " must be greater than or equal to " + minValue);
+		super(cause);
 	}
-
 }

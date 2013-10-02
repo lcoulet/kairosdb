@@ -27,4 +27,5 @@ public interface Datastore
 
 	public void deleteDataPoints(DatastoreMetricQuery deleteQuery, CachedSearchResult cachedSearchResult) throws DatastoreException;
 
+	public TagSet queryMetricTags(DatastoreMetricQuery query) throws DatastoreException;
 }

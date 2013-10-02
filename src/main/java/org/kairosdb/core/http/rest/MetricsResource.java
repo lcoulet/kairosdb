@@ -18,9 +18,11 @@ package org.kairosdb.core.http.rest;
 
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.stream.MalformedJsonException;
+import com.google.inject.name.Named;
+import org.kairosdb.core.datastore.DataPointGroup;
+import org.kairosdb.core.datastore.DatastoreQuery;
 import org.kairosdb.core.datastore.KairosDatastore;
 import org.kairosdb.core.datastore.QueryMetric;
-import org.kairosdb.core.datastore.QueryResults;
 import org.kairosdb.core.formatter.DataFormatter;
 import org.kairosdb.core.formatter.FormatterException;
 import org.kairosdb.core.formatter.JsonFormatter;
@@ -29,7 +31,8 @@ import org.kairosdb.core.http.rest.json.ErrorResponse;
 import org.kairosdb.core.http.rest.json.GsonParser;
 import org.kairosdb.core.http.rest.json.JsonMetricParser;
 import org.kairosdb.core.http.rest.json.JsonResponseBuilder;
-import org.kairosdb.core.http.rest.validation.ValidationException;
+import org.kairosdb.core.reporting.ThreadReporter;
+import org.kairosdb.util.ValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,11 +60,19 @@ enum NameType
 @Path("/api/v1")
 public class MetricsResource
 {
-	private static final Logger log = LoggerFactory.getLogger(MetricsResource.class);
+	public static final Logger logger = LoggerFactory.getLogger(MetricsResource.class);
+	public static final String QUERY_TIME = "kairosdb.http.query_time";
+	public static final String REQUEST_TIME = "kairosdb.http.request_time";
+
+	public static final String QUERY_URL = "/datapoints/query";
 
 	private final KairosDatastore datastore;
 	private final Map<String, DataFormatter> formatters = new HashMap<String, DataFormatter>();
 	private final GsonParser gsonParser;
+
+	@Inject
+	@Named("HOSTNAME")
+	private String hostName = "localhost";
 
 	@Inject
 	public MetricsResource(KairosDatastore datastore, GsonParser gsonParser)
@@ -158,7 +169,7 @@ public class MetricsResource
 		}
 		catch (Exception e)
 		{
-			log.error("Failed to add metric.", e);
+			logger.error("Failed to add metric.", e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
 		}
 	}
@@ -166,11 +177,11 @@ public class MetricsResource
 
 	@POST
 	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
-	@Path("/datapoints/query")
-	public Response get(String json) throws Exception
+	@Path("/datapoints/query/tags")
+	public Response getMeta(String json)
 	{
-		// todo verify that end time is not before start time.
 		checkNotNull(json);
+		logger.debug(json);
 
 		try
 		{
@@ -180,26 +191,25 @@ public class MetricsResource
 			JsonResponse jsonResponse = new JsonResponse(writer);
 
 			jsonResponse.begin();
-			jsonResponse.startQueries();
 
 			List<QueryMetric> queries = gsonParser.parseQueryMetric(json);
 
 			for (QueryMetric query : queries)
 			{
-				QueryResults qr = datastore.query(query);
+				List<DataPointGroup> result = datastore.queryTags(query);
 
 				try
 				{
-					jsonResponse.formatQuery(qr);
+					jsonResponse.formatQuery(result, false, -1);
 				}
 				finally
 				{
-					if (qr != null)
-						qr.close();
+					for (DataPointGroup dataPointGroup : result)
+					{
+						dataPointGroup.close();
+					}
 				}
 			}
-
-			jsonResponse.endQueries();
 
 			jsonResponse.end();
 			writer.flush();
@@ -228,8 +238,96 @@ public class MetricsResource
 		}
 		catch (Exception e)
 		{
-			log.error("Query failed.", e);
+			logger.error("Query failed.", e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
+		}
+	}
+
+	@POST
+	@Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+	@Path(QUERY_URL)
+	public Response get(String json) throws Exception
+	{
+		checkNotNull(json);
+		logger.debug(json);
+
+		ThreadReporter.setReportTime(System.currentTimeMillis());
+		ThreadReporter.addTag("host", hostName);
+
+		try
+		{
+			File respFile = File.createTempFile("kairos", ".json");
+			BufferedWriter writer = new BufferedWriter(new FileWriter(respFile));
+
+			JsonResponse jsonResponse = new JsonResponse(writer);
+
+			jsonResponse.begin();
+
+			List<QueryMetric> queries = gsonParser.parseQueryMetric(json);
+
+			int queryCount = 0;
+			for (QueryMetric query : queries)
+			{
+				queryCount ++;
+				ThreadReporter.addTag("metric_name", query.getName());
+				ThreadReporter.addTag("query_index", String.valueOf(queryCount));
+
+				DatastoreQuery dq = datastore.createQuery(query);
+				long startQuery = System.currentTimeMillis();
+
+				try
+				{
+					List<DataPointGroup> results = dq.execute();
+					jsonResponse.formatQuery(results, query.isExcludeTags(), dq.getSampleSize());
+
+					ThreadReporter.addDataPoint(QUERY_TIME, System.currentTimeMillis() - startQuery);
+				}
+				finally
+				{
+					dq.close();
+				}
+			}
+
+			jsonResponse.end();
+			writer.flush();
+			writer.close();
+
+			ThreadReporter.clearTags();
+			ThreadReporter.addTag("host", hostName);
+			ThreadReporter.addTag("request", QUERY_URL);
+			ThreadReporter.addDataPoint(REQUEST_TIME, System.currentTimeMillis() - ThreadReporter.getReportTime());
+
+			ThreadReporter.submitData(datastore);
+
+			ResponseBuilder responseBuilder = Response.status(Response.Status.OK).entity(
+					new FileStreamingOutput(respFile));
+
+			setHeaders(responseBuilder);
+			return responseBuilder.build();
+		}
+		catch (JsonSyntaxException e)
+		{
+			JsonResponseBuilder builder = new JsonResponseBuilder(Response.Status.BAD_REQUEST);
+			return builder.addError(e.getMessage()).build();
+		}
+		catch (QueryException e)
+		{
+			JsonResponseBuilder builder = new JsonResponseBuilder(Response.Status.BAD_REQUEST);
+			return builder.addError(e.getMessage()).build();
+		}
+		catch (BeanValidationException e)
+		{
+			JsonResponseBuilder builder = new JsonResponseBuilder(Response.Status.BAD_REQUEST);
+			return builder.addErrors(e.getErrorMessages()).build();
+		}
+		catch (Exception e)
+		{
+			logger.error("Query failed.", e);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
+		}
+		finally
+		{
+			ThreadReporter.clear();
 		}
 	}
 
@@ -239,6 +337,7 @@ public class MetricsResource
 	public Response delete(String json) throws Exception
 	{
 		checkNotNull(json);
+		logger.debug(json);
 
 		try
 		{
@@ -270,7 +369,7 @@ public class MetricsResource
 		}
 		catch (Exception e)
 		{
-			log.error("Delete failed.", e);
+			logger.error("Delete failed.", e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
 		}
 	}
@@ -321,7 +420,7 @@ public class MetricsResource
 		}
 		catch (Exception e)
 		{
-			log.error("Delete failed.", e);
+			logger.error("Delete failed.", e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(new ErrorResponse(e.getMessage())).build();
 		}
 	}
@@ -353,7 +452,7 @@ public class MetricsResource
 		}
 		catch (Exception e)
 		{
-			log.error("Failed to get " + type, e);
+			logger.error("Failed to get " + type, e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(
 					new ErrorResponse(e.getMessage())).build();
 		}
@@ -381,7 +480,7 @@ public class MetricsResource
 			}
 			catch (FormatterException e)
 			{
-				log.error("Description of what failed:", e);
+				logger.error("Description of what failed:", e);
 			}
 
 			writer.flush();

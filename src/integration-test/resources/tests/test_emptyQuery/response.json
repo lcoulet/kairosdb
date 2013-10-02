@@ -2,7 +2,11 @@
 	{
 		"results": [
 			{
+<<<<<<< HEAD
 				"name": "",
+=======
+				"name": "name",
+>>>>>>> 86f6e0407c8c8cc7f4b76d7779c8ed9d032ada18
 				"tags": {},
 				"values": []
 			}

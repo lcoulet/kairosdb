@@ -18,6 +18,7 @@ package org.kairosdb.datastore.cassandra;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.SetMultimap;
+import org.hamcrest.CoreMatchers;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -32,11 +33,13 @@ import org.kairosdb.datastore.DatastoreTestHelper;
 import java.io.IOException;
 import java.util.*;
 
+import static junit.framework.Assert.assertFalse;
 import static junit.framework.TestCase.assertEquals;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.core.Is.is;
 
 
 public class CassandraDatastoreTest extends DatastoreTestHelper
@@ -228,8 +231,8 @@ public class CassandraDatastoreTest extends DatastoreTestHelper
 		query.setEndTime(s_dataPointTime);
 		query.setTags(tagFilter);
 
-		QueryResults queryResults = DatastoreTestHelper.s_datastore.query(query);
-		List<DataPointGroup> results = queryResults.getDataPoints();
+		DatastoreQuery dq = DatastoreTestHelper.s_datastore.createQuery(query);
+		List<DataPointGroup> results = dq.execute();
 
 		DataPointGroup dataPointGroup = results.get(0);
 		int counter = 0;
@@ -244,7 +247,7 @@ public class CassandraDatastoreTest extends DatastoreTestHelper
 		dataPointGroup.close();
 		assertThat(total, equalTo(counter * 42));
 		assertEquals(OVERFLOW_SIZE, counter);
-		queryResults.close();
+		dq.close();
 	}
 
 	@Test (expected = NullPointerException.class)
@@ -349,25 +352,41 @@ public class CassandraDatastoreTest extends DatastoreTestHelper
 		Thread.sleep(2000);
 
 		rows = s_datastore.queryDatabase(query, createCache(metricToDelete));
-		assertThat(rows.size(), equalTo(1));
-		DataPointRow row = rows.get(0);
-		int count = 0;
-		while(row.hasNext())
-		{
-			DataPoint next = row.next();
-			assertThat(next.getLongValue(), equalTo(16L));
-			count++;
-		}
+		assertThat(rows.size(), equalTo(0));
 
-		assertThat(count, equalTo(0));
-
-		// Verify that the index key is gone
+		// Verify that the index key is still there
 		DatastoreMetricQueryImpl queryEverything = new DatastoreMetricQueryImpl(metricToDelete, EMPTY_MAP, 0L, Long.MAX_VALUE);
 		ListMultimap<Long, DataPointsRowKey> indexRowKeys = s_datastore.getKeysForQuery(queryEverything);
 		assertThat(indexRowKeys.size(), equalTo(1));
 
 		// Verify that the metric name still exists in the Strings column family
 		assertThat(s_datastore.getMetricNames(), hasItem(metricToDelete));
+	}
+
+	/**
+	 This is here because hbase throws an exception in this case
+	 @throws DatastoreException
+	 */
+	@Test
+	public void test_queryDatabase_noMetric() throws DatastoreException
+	{
+
+		Map<String, String> tags = new TreeMap<String, String>();
+		QueryMetric query = new QueryMetric(500, 0, "metric_not_there");
+		query.setEndTime(3000);
+
+		query.setTags(tags);
+
+		DatastoreQuery dq = super.s_datastore.createQuery(query);
+
+		List<DataPointGroup> results = dq.execute();
+
+		assertThat(results.size(), CoreMatchers.equalTo(1));
+		DataPointGroup dpg = results.get(0);
+		assertThat(dpg.getName(), is("metric_not_there"));
+		assertFalse(dpg.hasNext());
+
+		dq.close();
 	}
 
 	@Test

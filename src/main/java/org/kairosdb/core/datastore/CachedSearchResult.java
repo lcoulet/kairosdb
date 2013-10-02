@@ -39,6 +39,7 @@ public class CachedSearchResult
 
 	private String m_metricName;
 	private List<FilePositionMarker> m_dataPointSets;
+	private FilePositionMarker m_currentFilePositionMarker;
 	private ByteBuffer m_writeBuffer;
 	private File m_dataFile;
 	private FileChannel m_dataFileChannel;
@@ -224,7 +225,8 @@ public class CachedSearchResult
 		endDataPoints();
 
 		long curPosition = m_dataFileChannel.position();
-		m_dataPointSets.add(new FilePositionMarker(curPosition, tags));
+		m_currentFilePositionMarker = new FilePositionMarker(curPosition, tags);
+		m_dataPointSets.add(m_currentFilePositionMarker);
 	}
 
 	private void flushWriteBuffer() throws IOException
@@ -251,8 +253,9 @@ public class CachedSearchResult
 		}
 		m_writeBuffer.putLong(timestamp);
 		m_writeBuffer.put(LONG_FLAG);
-		m_writeBuffer.putLong(value);
-                m_writeBuffer.putLong(1L);
+		m_writeBuffer.putLong(value);		
+		m_writeBuffer.putLong(1L);
+		m_currentFilePositionMarker.incrementDataPointCount();
 	}
 
 	/**
@@ -280,6 +283,8 @@ public class CachedSearchResult
 		m_writeBuffer.put(LONG_FLAG);
 		m_writeBuffer.putLong(value);
                 m_writeBuffer.putLong(meta);
+
+		m_currentFilePositionMarker.incrementDataPointCount();
 	}
 
 	public void addDataPoint(long timestamp, double value, long meta) throws IOException
@@ -312,6 +317,7 @@ public class CachedSearchResult
 		private long m_startPosition;
 		private long m_endPosition;
 		private Map<String, String> m_tags;
+		private int m_dataPointCount;
 
 
 		public FilePositionMarker()
@@ -319,6 +325,7 @@ public class CachedSearchResult
 			m_startPosition = 0L;
 			m_endPosition = 0L;
 			m_tags = new HashMap<String, String>();
+			m_dataPointCount = 0;
 		}
 
 		public FilePositionMarker(long startPosition, Map<String, String> tags)
@@ -337,10 +344,21 @@ public class CachedSearchResult
 			return m_tags;
 		}
 
+		public void incrementDataPointCount()
+		{
+			m_dataPointCount ++;
+		}
+
+		public int getDataPointCount()
+		{
+			return m_dataPointCount;
+		}
+
 		@Override
 		public CachedDataPointRow iterator()
 		{
-			return (new CachedDataPointRow(m_tags, m_startPosition, m_endPosition));
+			return (new CachedDataPointRow(m_tags, m_startPosition, m_endPosition,
+					m_dataPointCount));
 		}
 
 		@Override
@@ -378,9 +396,10 @@ public class CachedSearchResult
 		private long m_endPostition;
 		private ByteBuffer m_readBuffer;
 		private Map<String, String> m_tags;
+		private int m_dataPointCount;
 
 		public CachedDataPointRow(Map<String, String> tags,
-				long startPosition, long endPostition)
+				long startPosition, long endPostition, int dataPointCount)
 		{
 			m_currentPosition = startPosition;
 			m_endPostition = endPostition;
@@ -388,6 +407,7 @@ public class CachedSearchResult
 			m_readBuffer.clear();
 			m_readBuffer.limit(0);
 			m_tags = tags;
+			m_dataPointCount = dataPointCount;
 		}
 
 		private void readMorePoints() throws IOException
@@ -468,6 +488,12 @@ public class CachedSearchResult
 		public void close()
 		{
 			decrementClose();
+		}
+
+		@Override
+		public int getDataPointCount()
+		{
+			return m_dataPointCount;
 		}
 
 		@Override

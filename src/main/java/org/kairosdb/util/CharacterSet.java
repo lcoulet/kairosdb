@@ -13,22 +13,27 @@
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
  */
-package org.kairosdb.core.exception;
+package org.kairosdb.util;
 
-public class KariosDBException extends Exception
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class CharacterSet
 {
-	public KariosDBException(String message)
+	private static final Pattern regex = Pattern.compile("^[a-zA-Z0-9\\-\\./_]*$");
+
+	private CharacterSet()
 	{
-		super(message);
 	}
 
-	public KariosDBException(String message, Throwable cause)
+	/**
+	 * Returns true if the specified string contains a valid set of characters
+	 * @param s string to test
+	 * @return true if all characters in the string are valid
+	 */
+	public static boolean isValid(String s)
 	{
-		super(message, cause);
-	}
-
-	public KariosDBException(Throwable cause)
-	{
-		super(cause);
+		Matcher matcher = regex.matcher(s);
+		return matcher.matches();
 	}
 }

@@ -27,7 +27,7 @@ import org.kairosdb.core.datastore.DataPointRow;
 import org.kairosdb.core.datastore.KairosDatastore;
 import org.kairosdb.core.datastore.QueryMetric;
 import org.kairosdb.core.exception.DatastoreException;
-import org.kairosdb.core.exception.KariosDBException;
+import org.kairosdb.core.exception.KairosDBException;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
@@ -50,6 +50,10 @@ public class Main
 	private static FileParam s_exportFile = new FileParam("f",
 			"file to save export to or read from depending on command", FileParam.NO_ATTRIBUTES,
 			FileParam.OPTIONAL);
+
+	private static StringParam s_exportMetricNames = new StringParam("n",
+			"name of metrics to export. If not specified, then all metrics are exported", 1,
+			StringParam.UNSPECIFIED_LENGTH, true, true);
 
 	/**
 	start is identical to run except that logging data only goes to the log file
@@ -79,7 +83,7 @@ public class Main
 		{
 			if (propName.startsWith(SERVICE_PREFIX))
 			{
-				Class<?> aClass = null;
+				Class<?> aClass;
 				try
 				{
 					if ("".equals(props.getProperty(propName)))
@@ -126,7 +130,7 @@ public class Main
 	{
 		CmdLineHandler cl = new VersionCmdLineHandler("Version 1.0",
 				new HelpCmdLineHandler("KairosDB Help", "kairosdb", "Starts KairosDB",
-						new Parameter[]{s_operationCommand, s_propertiesFile, s_exportFile}, null));
+						new Parameter[]{s_operationCommand, s_propertiesFile, s_exportFile, s_exportMetricNames}, null));
 
 		cl.parse(args);
 
@@ -161,12 +165,12 @@ public class Main
 			if (s_exportFile.isSet())
 			{
 				PrintStream ps = new PrintStream(new FileOutputStream(s_exportFile.getValue()));
-				main.runExport(ps);
+				main.runExport(ps, s_exportMetricNames.getValues());
 				ps.close();
 			}
 			else
 			{
-				main.runExport(System.out);
+				main.runExport(System.out, s_exportMetricNames.getValues());
 			}
 
 			main.stopServices();
@@ -233,13 +237,16 @@ public class Main
 		}
 	}
 
-	public void runExport(PrintStream out) throws DatastoreException, IOException
+	public void runExport(PrintStream out, List<String> metricNames) throws DatastoreException, IOException
 	{
 		KairosDatastore ds = m_injector.getInstance(KairosDatastore.class);
 
-		Iterable<String> metrics = ds.getMetricNames();
+		Iterable<String> metrics;
 
-		//metrics = Arrays.asList("gov_status_responsetime", "gov_status_downtime");
+		if (metricNames != null && metricNames.size() > 0)
+				metrics = metricNames;
+		else
+			metrics = ds.getMetricNames();
 
 		try
 		{
@@ -351,7 +358,7 @@ public class Main
 	}
 
 
-	public void startServices() throws KariosDBException
+	public void startServices() throws KairosDBException
 	{
 		Map<Key<?>, Binding<?>> bindings =
 				m_injector.getAllBindings();

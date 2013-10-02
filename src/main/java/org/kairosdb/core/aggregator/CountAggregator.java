@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Integral Systems Europe.
+ * Copyright 2013 Proofpoint Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -21,30 +21,29 @@ import org.kairosdb.core.aggregator.annotation.AggregatorName;
 import java.util.Collections;
 import java.util.Iterator;
 
-
-
-@AggregatorName(name = "count", description = "Returns the number of data point for the time range.")
+@AggregatorName(name = "count", description = "Counts the number of data points.")
 public class CountAggregator extends RangeAggregator
 {
-	@Override
-	protected RangeSubAggregator getSubAggregator()
-	{
-		return (new CountDataPointAggregator());
-	}
+    @Override
+    protected RangeSubAggregator getSubAggregator()
+    {
+        return (new CountDataPointAggregator());
+    }
 
-	private class CountDataPointAggregator implements RangeSubAggregator
-	{
+    private class CountDataPointAggregator implements RangeSubAggregator
+    {
+        @Override
+        public Iterable<DataPoint> getNextDataPoints(long returnTime, Iterator<DataPoint> dataPointRange)
+        {
+            long count = 0;
+            while (dataPointRange.hasNext())
+            {
+                count++;
 
-		@Override
-		public Iterable<DataPoint> getNextDataPoints(long returnTime, Iterator<DataPoint> dataPointRange)
-		{
-                        long count=0;
-			while (dataPointRange.hasNext())
-			{	
-				dataPointRange.next();
-                                count++;
-			}
-                        return Collections.singletonList( new DataPoint(returnTime, count) );
-		}
-	}
+                dataPointRange.next();
+            }
+
+            return Collections.singletonList(new DataPoint(returnTime, count));
+        }
+    }
 }
