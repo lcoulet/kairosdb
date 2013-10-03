@@ -152,8 +152,8 @@ function buildKairosDBQuery(){
 
 		// Add Tags
 		$metricContainer.find("[name='tags']").each(function (index, tagContainer) {
-			var name = $(tagContainer).find("[name='tagName']").val();
-			var value = $(tagContainer).find("[name='tagValue']").val();
+			var name = $(tagContainer).find("[name='tagName']").combobox("value");
+			var value = $(tagContainer).find("[name='tagValue']").combobox("value");
 
 			if (name && value)
 				metric.addTag(name, value);
