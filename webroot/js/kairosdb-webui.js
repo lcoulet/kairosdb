@@ -8,7 +8,7 @@ function displayQuery() {
 
 
 
-function buildKairosDBQuery(){
+function buildKairosDBQuery() {
     var query = new kairosdb.MetricQuery();
 
 	// todo cachetime
@@ -195,7 +195,7 @@ function updateChart() {
 	showChartForQuery("(Click and drag to zoom)", query, metricData);
 }
 
-function resetQueryStatus{
+function resetQueryStatus() {
 	$("#resetZoom").hide();
 	$("#errorContainer").hide();
 

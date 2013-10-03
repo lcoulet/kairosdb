@@ -36,7 +36,7 @@ function exportCsvQueryData() {
 	
 }
 
-function exportJsonQueryData(){	
+function exportJsonQueryData() {	
 	resetQueryStatus();
 	var query = buildKairosDBQuery();
 	kairosdb.dataPointsQuery(query, function (resultSet) {
